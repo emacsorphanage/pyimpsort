@@ -1,0 +1,10 @@
+*~
+*.elc
+*.py[cod]
+*.egg
+*.egg-info
+.cask
+.tox
+elpa
+__pycache__
+make-readme-markdown.el
