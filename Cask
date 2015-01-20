@@ -1,4 +1,4 @@
-(package-file "impsort.el")
+(package-file "pyimpsort.el")
 
 (source gnu)
 (source melpa)

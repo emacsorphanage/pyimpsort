@@ -1,29 +1,29 @@
-## impsort.el
+## pyimpsort.el
 *Sort python imports. -*- lexical-binding: t -*-*
 
 ---
-[![Travis build status](https://travis-ci.org/emacs-pe/impsort.el.png?branch=master)](https://travis-ci.org/emacs-pe/impsort.el)
+[![Travis build status](https://travis-ci.org/emacs-pe/pyimpsort.el.png?branch=master)](https://travis-ci.org/emacs-pe/pyimpsort.el)
 
-`impsort.el` sort the python imports of a file.
-Currently uses [impsort.py](impsort.py) to process the way to sort python
+`pyimpsort.el` sort the python imports of a file.
+Currently uses [pyimpsort.py](pyimpsort.py) to process the way to sort python
 imports.
 
 ### Setup
 
 Add the following snippet to your `init.el`:
 
-    (require 'impsort)
+    (require 'pyimpsort)
     (eval-after-load 'python
-      '(define-key python-mode-map "\C-c\C-u" #'impsort-buffer))
+      '(define-key python-mode-map "\C-c\C-u" #'pyimpsort-buffer))
 
 ### Troubleshooting
 
 + **Doesn't sort correcly third party libraries**
 
-  `impsort.el` tries to identify the third party libraries if are installed
+  `pyimpsort.el` tries to identify the third party libraries if are installed
   in in the PYTHONPATH, if a package is not installed it is assumed that
   belongs to the application.
-  `impsort.el` also tries to identify if a python virtualenv
+  `pyimpsort.el` also tries to identify if a python virtualenv
   is activated.
 
 ### Related projects
@@ -35,11 +35,11 @@ Add the following snippet to your `init.el`:
 ### Function Documentation
 
 
-#### `(impsort-region BEGIN END)`
+#### `(pyimpsort-region BEGIN END)`
 
 Sort python imports from region BEGIN to END points.
 
-#### `(impsort-buffer)`
+#### `(pyimpsort-buffer)`
 
 Sort python imports from current buffer.
 

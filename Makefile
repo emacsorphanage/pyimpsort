@@ -6,9 +6,9 @@ PYTEST ?= py.test
 BATCH   = $(EMACS) --batch -Q -L .
 BATCHC  = $(BATCH) -f batch-byte-compile
 
-ELS     = impsort.el
+ELS     = pyimpsort.el
 ELCS    = $(ELS:.el=.elc)
-ELSTEST = test_impsort.el
+ELSTEST = test_pyimpsort.el
 
 .PHONY: all
 all: compile README.md

@@ -5,7 +5,7 @@ import io
 
 import pytest
 
-from impsort import ImpSorter
+from pyimpsort import ImpSorter
 
 
 @pytest.mark.parametrize('infname,outfname', [
