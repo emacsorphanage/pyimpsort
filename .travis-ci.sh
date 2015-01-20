@@ -21,4 +21,6 @@ esac
 curl -fsSkL https://raw.github.com/cask/cask/master/go | python
 
 # § [ Python setup ] ───────────────────────────────────────────────────────────
-pip install -U tox
+pip install -U pytest
+# packages to simulate thirdparty modules
+pip install -U django python-dateutil

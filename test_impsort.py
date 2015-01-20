@@ -17,6 +17,7 @@ from impsort import ImpSorter
     ('samples/6.in', 'samples/6.out'),
     ('samples/7.in', 'samples/7.out'),
     ('samples/8.in', 'samples/8.out'),
+    ('samples/9.in', 'samples/9.out'),
 ])
 def test_sort_import(infname, outfname):
     with io.open(infname) as fin, io.open(outfname) as fout, io.StringIO() as res:

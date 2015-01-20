@@ -12,15 +12,13 @@ imports.
 
 Add the following snippet to your `init.el`:
 
-```elisp
-(require 'impsort)
-(eval-after-load 'python
-  '(define-key python-mode-map "\C-c\C-u" 'impsort-buffer))
-```
+    (require 'impsort)
+    (eval-after-load 'python
+      '(define-key python-mode-map "\C-c\C-u" #'impsort-buffer))
 
 ### Troubleshooting
 
-+ *Doesn't sort correcly third party libraries*
++ **Doesn't sort correcly third party libraries**
 
   `impsort.el` tries to identify the third party libraries if are installed
   in in the PYTHONPATH, if a package is not installed it is assumed that

@@ -2,6 +2,7 @@ TOX    ?= tox
 CASK   ?= cask
 WGET   ?= wget
 EMACS  ?= emacs
+PYTEST ?= py.test
 BATCH   = $(EMACS) --batch -Q -L .
 BATCHC  = $(BATCH) -f batch-byte-compile
 
@@ -10,10 +11,10 @@ ELCS    = $(ELS:.el=.elc)
 ELSTEST = test_impsort.el
 
 .PHONY: all
-all: install README.md
+all: compile README.md
 
-.PHONY: install
-install: elpa $(ELCS)
+.PHONY: compile
+compile: elpa $(ELCS)
 
 elpa: Cask
 	$(CASK) install
@@ -34,7 +35,7 @@ make-readme-markdown.el:
 test: test-py test-el
 
 test-py:
-	$(TOX)
+	$(PYTEST)
 
 test-el:
 	$(CASK) exec $(BATCH) -l ert -l $(ELSTEST) -f ert-run-tests-batch-and-exit

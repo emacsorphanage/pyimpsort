@@ -1,38 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-impsort
-=======
-
-Based on `vim-sort-python-imports <https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py>`_
-
-TODO
-----
-+ [ ] Add support for shared library modules which are installed in `{exec_prefix}/lib/python{X.Y}/lib-dynload`
+impsort.py
+==========
+Sort python imports. Based on vim-sort-python-imports_
 
 Links
 -----
 + https://www.python.org/dev/peps/pep-0008/#imports
 + https://github.com/reddit/reddit/wiki/PythonImportGuidelines
 + https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Imports
+
+.. _vim-sort-python-imports: https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py
 """
 from __future__ import print_function
 
 import argparse
 import ast
 import imp
-import keyword
 import pkgutil
-import re
 import sys
-import tokenize
 from collections import defaultdict
 from distutils import sysconfig
+from glob import glob1
+from os import path
 
-def isidentifier(value):
-    if value in keyword.kwlist:
-        return False
-    return re.match('^' + tokenize.Name + '$', value, re.I) is not None
+def _clean_ext_suffix(libname):
+    # See: https://www.python.org/dev/peps/pep-3149/
+    ext_suffix = sysconfig.get_config_var('EXT_SUFFIX') or '.so'
+    return libname.replace(ext_suffix, '')
 
 
 class ImpSorter(ast.NodeVisitor):
@@ -52,7 +48,7 @@ class ImpSorter(ast.NodeVisitor):
         self.original_nodes = []
         self.imports = set()
         self.from_imports = defaultdict(set)
-        self.stdlibs = set(self.iter_stdmodules()) | set(sys.builtin_module_names) | set(['itertools', 'operator'])
+        self.stdlibs = set(self.iter_stdmodules()) | set(self.get_dynlibs()) | set(sys.builtin_module_names)
         self.python_paths = [p for p in sys.path if p]
 
     def visit_Import(self, node):
@@ -72,6 +68,12 @@ class ImpSorter(ast.NodeVisitor):
             (nm.name, nm.asname) for nm in node.names
         )
         self.original_nodes.append(node)
+
+    @staticmethod
+    def get_dynlibs():
+        dirname = path.join(sys.exec_prefix, 'lib/python{0}/lib-dynload'.format(sysconfig.get_python_version()))
+        dynlibs = glob1(dirname, '*.so')
+        return map(_clean_ext_suffix, dynlibs)
 
     @staticmethod
     def iter_stdmodules():

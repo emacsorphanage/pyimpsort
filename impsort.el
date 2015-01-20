@@ -35,14 +35,12 @@
 ;;; Setup
 ;; Add the following snippet to your `init.el':
 ;;
-;; ```elisp
-;; (require 'impsort)
-;; (eval-after-load 'python
-;;   '(define-key python-mode-map "\C-c\C-u" 'impsort-buffer))
-;; ```
+;;     (require 'impsort)
+;;     (eval-after-load 'python
+;;       '(define-key python-mode-map "\C-c\C-u" #'impsort-buffer))
 ;;
 ;;; Troubleshooting:
-;; + *Doesn't sort correcly third party libraries*
+;; + **Doesn't sort correcly third party libraries**
 ;;
 ;;   `impsort.el' tries to identify the third party libraries if are installed
 ;;   in in the PYTHONPATH, if a package is not installed it is assumed that
@@ -64,18 +62,20 @@
   :prefix "impsort-"
   :group 'applications)
 
-(defcustom impsort-executable (concat (file-name-directory (or load-file-name buffer-file-name)) "impsort.py")
-  "Absolute path of python impsort.py script."
-  :type 'string
-  :group 'impsort)
+(defconst impsort-script
+  (expand-file-name "impsort.py"
+                    (file-name-directory (if load-in-progress
+                                             load-file-name
+                                           (buffer-file-name))))
+  "Absolute path of python impsort.py script.")
 
 (defvar impsort-error-buffer-name "*impsort-error*")
 
-;;  (rx (group (and bol (or "import" "from"))))
-(defconst impsort-imports-start-regexp "\\(^\\(?:from\\|import\\)\\)")
+(defconst impsort-imports-start-regexp
+  (rx (group (and bol (or "import" "from")))))
 
-;;  (rx (or (and bol (or "import" "from")) (and bol (* space) eol)))
-(defconst impsort-imports-end-regexp "^\\(?:from\\|import\\)\\|^[[:space:]]*$")
+(defconst impsort-imports-end-regexp
+  (rx (or (and bol (or "import" "from")) (and bol (* space) eol))))
 
 (defun impsort--search-beg-point (&optional end)
   "Search the first import line until reach the END point."
@@ -98,21 +98,14 @@
           (forward-line 1))))
     end))
 
-;; based on `python-shell-parse-command'
-(defun impsort--python-executable ()
-  "Calculate python executable path."
-  (let ((process-environment (python-shell-calculate-process-environment))
-        (exec-path (python-shell-calculate-exec-path)))
-    (executable-find python-shell-interpreter)))
-
 ;;;###autoload
 (defun impsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
   (interactive "r")
   (atomic-change-group
-    (unless (file-readable-p impsort-executable)
-      (error "'%s' is not readable" impsort-executable))
-    (let ((command (format "%s %s" (impsort--python-executable) impsort-executable)))
+    (let* ((exec-path (python-shell-calculate-exec-path))
+           (python-executable (executable-find python-shell-interpreter))
+           (command (format "%s %s" python-executable impsort-script)))
       (shell-command-on-region begin end command nil 'replace impsort-error-buffer-name t))))
 
 ;;;###autoload
