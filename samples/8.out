@@ -5,5 +5,7 @@ from os.path import abspath
 from os.path import basename
 from os.path import join as pjoin
 
-from ..app.core import init_app as _app
-from ..app.models import Member
+from settings import dbname
+
+from .app.core import init_app as _app
+from .app.models import Member
