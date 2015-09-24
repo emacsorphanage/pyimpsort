@@ -2,7 +2,9 @@
 *Sort python imports. -*- lexical-binding: t -*-*
 
 ---
-[![Travis build status](https://travis-ci.org/emacs-pe/pyimpsort.el.png?branch=master)](https://travis-ci.org/emacs-pe/pyimpsort.el)
+[![License GPLv3](https://img.shields.io/badge/license-GPL_v3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
+[![Build Status](https://travis-ci.org/emacs-pe/pyimpsort.el.svg?branch=master)](https://travis-ci.org/emacs-pe/pyimpsort.el)
+[![MELPA](http://melpa.org/packages/pyimpsort-badge.svg)](http://melpa.org/#/pyimpsort)
 
 `pyimpsort.el` sort the python imports of a file.
 Currently uses [pyimpsort.py](pyimpsort.py) to process the way to sort python
