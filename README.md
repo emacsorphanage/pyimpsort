@@ -1,9 +1,9 @@
+<a href="https://github.com/emacs-pe/pyimpsort.el"><img src="https://www.gnu.org/software/emacs/images/emacs.png" alt="Emacs Logo" width="80" height="80" align="right"></a>
 ## pyimpsort.el
-*Sort python imports. -*- lexical-binding: t -*-*
+*Sort python imports.*
 
 ---
 [![License GPLv3](https://img.shields.io/badge/license-GPL_v3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
-[![Build Status](https://travis-ci.org/emacs-pe/pyimpsort.el.svg?branch=master)](https://travis-ci.org/emacs-pe/pyimpsort.el)
 [![MELPA](http://melpa.org/packages/pyimpsort-badge.svg)](http://melpa.org/#/pyimpsort)
 
 `pyimpsort.el` sort the python imports of a file.
@@ -34,8 +34,19 @@ Add the following snippet to your `init.el`:
 
 [isort]: https://github.com/timothycrosley/isort
 
-### Function Documentation
 
+
+### Customization Documentation
+
+#### `pyimpsort-display-error-buffer`
+
+Display error buffer on error.
+
+#### `pyimpsort-error-buffer-name`
+
+Buffer name of pyimpsort error.
+
+### Function and Macro Documentation
 
 #### `(pyimpsort-region BEGIN END)`
 
