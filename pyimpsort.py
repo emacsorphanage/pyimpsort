@@ -17,18 +17,28 @@ from __future__ import print_function
 
 import argparse
 import ast
-import imp
-import pkgutil
 import sys
+if sys.version_info < (3, 4):
+    import imp
+    import pkgutil
+else:
+    import importlib.util
 from collections import defaultdict
-from distutils import sysconfig
+import sysconfig
 from glob import glob1
-from os import path
+from os import path, scandir
 
 def _clean_ext_suffix(libname):
     # See: https://www.python.org/dev/peps/pep-3149/
     ext_suffix = sysconfig.get_config_var('EXT_SUFFIX') or '.so'
     return libname.replace(ext_suffix, '')
+
+
+def _get_python_lib(standard_lib=True):
+    if standard_lib:
+        return sysconfig.get_path("stdlib")
+    else:
+        return sysconfig.get_path("purelib")
 
 
 class ImpSorter(ast.NodeVisitor):
@@ -76,18 +86,60 @@ class ImpSorter(ast.NodeVisitor):
         return map(_clean_ext_suffix, dynlibs)
 
     @staticmethod
-    def iter_stdmodules():
-        stdlib_path = sysconfig.get_python_lib(standard_lib=True)
+    def _iter_stdmodules_deprecated():
+        stdlib_path = _get_python_lib(standard_lib=True)
         importer = pkgutil.ImpImporter(stdlib_path)
         return (m for m, _ in importer.iter_modules())
 
-    def is_thirdparty(self, modname):
+    @staticmethod
+    def _iter_stdmodules_new():
+        # note this misses some edge cases that the original ImpImporter covered, i.e., namespace packages
+        # but works for the majority of common packages
+        stdlib_path = sysconfig.get_path('stdlib')
+        for entry in scandir(stdlib_path):
+            if entry.is_file() and entry.name.endswith('.py'):
+                module_name = path.splitext(entry.name)[0]
+                if module_name != '__init__':
+                    yield module_name
+            elif entry.is_dir():
+                init_file = path.join(entry.path, '__init__.py')
+                if path.isfile(init_file):
+                    yield entry.name
+
+        # Check for frozen modules
+        for module_name in sys.builtin_module_names:
+            if importlib.util.find_spec(module_name) is not None:
+                yield module_name
+
+    @staticmethod
+    def iter_stdmodules():
+        if sys.version_info < (3, 4):
+            return ImpSorter._iter_stdmodules_deprecated()
+        else:
+            return ImpSorter._iter_stdmodules_new()
+
+    def _is_thirdparty_deprecated(self, modname):
         try:
             imp.find_module(modname, self.python_paths)
             thirdparty = True
         except ImportError:
             thirdparty = False
         return thirdparty
+
+    def _is_thirdparty_new(self, modname):
+        for path in self.python_paths:
+            spec = importlib.util.find_spec(modname, path)
+            if spec is not None:
+                return True
+        return False
+
+    def is_thirdparty(self, modname):
+        # for older python
+        if sys.version_info < (3, 4):
+            return self._is_thirdparty_deprecated(modname)
+        # newer python (imp package doesn't exist in python 3.12+)
+        else:
+            return self._is_thirdparty_new(modname)
 
     # :: Node -> Key
     def _node_sort_key(self, node):
