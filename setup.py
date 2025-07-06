@@ -5,24 +5,31 @@ from setuptools import setup
 
 
 setup(
-    name='impsort',
-    version='0.1',
+    name='pyimpsort',
+    version='0.0.1',
     description='Sort python imports.',
-    py_modules=['impsort'],
+    py_modules=['pyimpsort'],
     license='MIT',
-    entry_points="""
-        [console_scripts]
-        impsort=impsort:main
-    """,
-    classifiers=(
+    entry_points={
+        "console_scripts": [
+            "pyimpsort = pyimpsort:main"
+        ]
+    },
+    classifiers=[
         "Development Status :: 4 - Beta",
         'Intended Audience :: Developers',
         'Natural Language :: English',
         'License :: OSI Approved :: MIT',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Environment :: Console',
-    )
+    ]
 )
