@@ -31,7 +31,7 @@
 ;; Currently uses [pyimpsort.py](pyimpsort.py) to process the way to sort python
 ;; imports.
 ;;
-;;; Setup
+;;; Setup:
 ;;
 ;; Add the following snippet to your `init.el':
 ;;
@@ -62,9 +62,17 @@
 ;;       (setq pyimpsort-command
 ;;             "docker exec -i my-container python3 -m pyimpsort")
 ;;
+;; - `pyimpsort-group-module-import'
+;;   If non-nil, group multiple imports from the same module into a single
+;;   statement. This adds the `--group` option to the command line.
+;;
+;;       (setq pyimpsort-group-module-import t)
+;;
 ;; You can also configure this per project using `.dir-locals.el`:
 ;;
-;;     ((python-mode . ((pyimpsort-command . "docker exec -i my-container python3 -m pyimpsort"))))
+;;    ((python-mode
+;;      . ((pyimpsort-command . "docker exec -i my-container python3 -m pyimpsort")
+;;         (pyimpsort-group-module-import . t))))
 ;;
 ;;
 ;;; Troubleshooting:
@@ -129,6 +137,21 @@ Use this if you run Python in a non-standard environment, such as a container:
 
 (make-variable-buffer-local 'pyimpsort-command)
 
+(defcustom pyimpsort-group-module-import nil
+  "Group multiple imports from the same module into a single statement.
+
+If non-nil, consecutive imports from the same module will be merged.
+For example, instead of:
+    from os import path
+    from os import remove
+
+You get:
+    from os import path, remove"
+  :type 'boolean
+  :group 'pyimpsort)
+
+(make-variable-buffer-local 'pyimpsort-group-module-import)
+
 (defconst pyimpsort-imports-start-regexp
   (rx (group (and bol (or "import" "from")))))
 
@@ -160,10 +183,13 @@ Use this if you run Python in a non-standard environment, such as a container:
 (defun pyimpsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
   (interactive "r")
-  (atomic-change-group
-    (or (zerop (shell-command-on-region begin end pyimpsort-command nil 'replace
-                                        pyimpsort-error-buffer-name pyimpsort-display-error-buffer))
-        (error "Command exited abnormally.  See %s for details" pyimpsort-error-buffer-name))))
+  (let ((command pyimpsort-command))
+    (when pyimpsort-group-module-import
+      (setq command (concat command " --group")))
+    (atomic-change-group
+      (or (zerop (shell-command-on-region begin end command nil 'replace
+                                          pyimpsort-error-buffer-name pyimpsort-display-error-buffer))
+          (error "Command exited abnormally.  See %s for details" pyimpsort-error-buffer-name)))))
 
 ;;;###autoload
 (defun pyimpsort-buffer ()
