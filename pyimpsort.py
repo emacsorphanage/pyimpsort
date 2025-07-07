@@ -81,7 +81,7 @@ class ImpSorter(ast.NodeVisitor):
 
     @staticmethod
     def get_dynlibs():
-        dirname = path.join(sys.exec_prefix, 'lib', 'python{0}'.format(sysconfig.get_python_version()), 'lib-dynload')
+        dirname = path.join(sysconfig.get_path("stdlib"), "lib-dynload")
         dynlibs = glob1(dirname, '*.so')
         return map(_clean_ext_suffix, dynlibs)
 
