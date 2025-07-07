@@ -28,6 +28,7 @@ import sysconfig
 from glob import glob1
 from os import path, scandir
 
+
 def _clean_ext_suffix(libname):
     # See: https://www.python.org/dev/peps/pep-3149/
     ext_suffix = sysconfig.get_config_var('EXT_SUFFIX') or '.so'
@@ -53,6 +54,13 @@ class ImpSorter(ast.NodeVisitor):
 
     We also make sure only 1 name is imported per import statement.
     """
+
+    # Groups of import statements
+    FUTURE = 0
+    STDLIB = 1
+    THIRD_PARTY = 2
+    LOCAL = 3
+    RELATIVE = 4
 
     def __init__(self):
         self.original_nodes = []
@@ -146,89 +154,135 @@ class ImpSorter(ast.NodeVisitor):
         """
         Given an AST node return a tuple which is used for sorting.
         """
-        non_future = non_stdlib = non_thirdparty = True
-        relative = False
+        level = getattr(node, "level", 0)
         if isinstance(node, ast.Import):
-            name = [node.names[0].name, node.names[0].asname]
-            level = 0
-            from_names = None
+            name = tuple(
+                x for x in (node.names[0].name, node.names[0].asname) if x is not None
+            )
             fromimport = 0
         elif isinstance(node, ast.ImportFrom):
-            name = [node.module]
-            level = node.level
-            from_names = [nm.name for nm in node.names]
+            name = (node.module or "", )
             fromimport = 1
         else:
             raise TypeError(node)
-        modname = name[0].split('.')[0] if name[0] else ''
+        modname = name[0].split('.')[0]
         if level != 0:
-            relative = True
+            group = self.RELATIVE
         elif modname == '__future__':
-            non_future = False
+            group = self.FUTURE
         elif modname in self.stdlibs:
-            non_stdlib = False
+            group = self.STDLIB
         elif self.is_thirdparty(modname):
-            non_thirdparty = False
-        return (non_future, non_stdlib, non_thirdparty, relative, level, fromimport, name, from_names)
+            group = self.THIRD_PARTY
+        else:
+            group = self.LOCAL
+        return (group, level, fromimport, name)
 
     def new_nodes(self):
         """
         Generate a list of tuples with the form `(Key, Node)`.
         """
-        nodes = []
-        for (level, module), names in self.from_imports.items():
-            for nm, asnm in sorted(names):
-                node = ast.ImportFrom(
-                    module=module,
-                    names=[ast.alias(name=nm, asname=asnm)],
-                    level=level
-                )
-                nodes.append((self._node_sort_key(node), node))
-        for nm, asnm in self.imports:
-            node = ast.Import(names=[ast.alias(name=nm, asname=asnm)])
-            nodes.append((self._node_sort_key(node), node))
-        return nodes
+        nodes = [
+            ast.Import(names=[ast.alias(name=nm, asname=asnm)])
+            for nm, asnm in self.imports
+        ]
+        # from ... import are groups into single statement
+        nodes.extend(
+            ast.ImportFrom(
+                module=module,
+                names=[ast.alias(name=nm, asname=asnm) for nm, asnm in sorted(names)],
+                level=level,
+            )
+            for (level, module), names in self.from_imports.items()
+        )
+        return [(self._node_sort_key(node), node) for node in nodes]
 
-    def write_sorted(self, file=sys.stdout):
+    def format_import(self, node):
+        alias = node.names[0]
+        s = f"import {alias.name}"
+        if alias.asname:
+            s += f" as {alias.asname}"
+        return s
+
+    def format_import_from(self, node):
+        """
+        Format statement associated to a ast.ImportFrom 'node'.
+        """
+        fullnames = [
+            " as ".join(nm for nm in (name.name, name.asname) if nm)
+            for name in node.names
+        ]
+        res = f"from {'.' * node.level}{node.module or ''} import "
+        if len(res) + sum(len(x) for x in fullnames) + (len(fullnames) - 1) * 2 <= 80:
+            return res + ", ".join(fullnames)
+        # Need to split into multiples lines
+        lines = [res + "("]
+        toks = [x + "," for x in fullnames[:-1]]
+        toks.append(fullnames[-1])
+        line = "   "
+        for tok in toks:
+            if len(line) + len(tok) + 1 <= 80:
+                line += f" {tok}"
+            else:
+                lines.append(line)
+                line = f"    {tok}"
+        lines.append(line)
+        lines.append(")")
+        return "\n".join(lines)
+
+    def write_sorted(self, file=sys.stdout, group=False):
         """
         Write sorted imports to file.
 
         file: a file-like object (stream).
+        group:
         """
         pkey = None
         for key, node in sorted(self.new_nodes()):
             # insert new lines between groups
-            if pkey and key[:4] != pkey[:4]:
-                print(u'', file=file)
+            if pkey and key[0] != pkey[0]:
+                file.write("\n")
             pkey = key
-
-            # names here will actually always only have 1 element in it
-            # because we are only allowed 1 per line, but it's easy
-            # enough to cope with multiple anyway.
-            all_names = ', '.join(
-                (' as '.join(nm for nm in (name.name, name.asname) if nm))
-                for name in node.names
-            )
-
             if isinstance(node, ast.Import):
-                print(u'import {0}'.format(all_names), file=file)
-            elif isinstance(node, ast.ImportFrom):
-                print(u'from {0}{1} import {2}'.format('.' * node.level, node.module or '', all_names), file=file)
+                file.write(self.format_import(node))
+                file.write("\n")
+            else:
+                if group:
+                    file.write(self.format_import_from(node))
+                    file.write("\n")
+                else:
+                    for alias in node.names:
+                        file.write(
+                            self.format_import_from(
+                                ast.ImportFrom(
+                                    module=node.module, level=node.level, names=[alias]
+                                )
+                            )
+                        )
+                        file.write("\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Python sort imports.")
-    parser.add_argument('infile', nargs='?', type=argparse.FileType('r'),
-                        default=sys.stdin)
-    parser.add_argument('outfile', nargs='?', type=argparse.FileType('w'),
-                        default=sys.stdout)
+    parser.add_argument(
+        "infile", nargs="?", type=argparse.FileType("r"), default=sys.stdin
+    )
+    parser.add_argument(
+        "outfile", nargs="?", type=argparse.FileType("w"), default=sys.stdout
+    )
+    parser.add_argument(
+        "--group",
+        action="store_true",
+        default=False,
+        help="Group from ... import statement",
+    )
 
     args = parser.parse_args()
     with args.infile as infile, args.outfile as outfile:
         tree = ast.parse(infile.read())
         i = ImpSorter()
         i.visit(tree)
-        i.write_sorted(outfile)
+        i.write_sorted(outfile, group=args.group)
 
 
 if __name__ == '__main__':
