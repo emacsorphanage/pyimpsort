@@ -32,13 +32,43 @@
 ;; imports.
 ;;
 ;;; Setup
+;;
 ;; Add the following snippet to your `init.el':
 ;;
 ;;     (require 'pyimpsort)
 ;;     (eval-after-load 'python
 ;;       '(define-key python-mode-map "\C-c\C-u" #'pyimpsort-buffer))
 ;;
+;;; Configuration:
+;;
+;; By default, `pyimpsort.el' looks for the `pyimpsort.py` script in the same
+;; directory as this file, and constructs a shell command to run it using the
+;; Python interpreter configured in Emacs (`python-shell-interpreter').
+;;
+;; These variables can be customized:
+;;
+;; - `pyimpsort-script'
+;;   Absolute path to the `pyimpsort.py` script.  By default, it is resolved
+;;   relative to the location of this file.  You can override it like so:
+;;
+;;       (setq pyimpsort-script "/my/custom/path/to/pyimpsort.py")
+;;
+;; - `pyimpsort-command'
+;;   Full shell command used to call the script.  By default, it launches the
+;;   `pyimpsort-script' using the Python interpreter configured in Emacs
+;;   (`python-shell-interpreter').  Useful when calling the script inside a
+;;   container or custom environment.  Example:
+;;
+;;       (setq pyimpsort-command
+;;             "docker exec -i my-container python3 -m pyimpsort")
+;;
+;; You can also configure this per project using `.dir-locals.el`:
+;;
+;;     ((python-mode . ((pyimpsort-command . "docker exec -i my-container python3 -m pyimpsort"))))
+;;
+;;
 ;;; Troubleshooting:
+;;
 ;; + **Doesn't sort correctly third party libraries**
 ;;
 ;;   `pyimpsort.el' tries to identify the third party libraries if are installed
@@ -48,6 +78,7 @@
 ;;   is activated.
 ;;
 ;;; Related projects:
+;;
 ;; + [isort][] ([emacs integration](https://github.com/paetzke/py-isort.el))
 ;;
 ;; [isort]: https://github.com/timothycrosley/isort
@@ -71,12 +102,32 @@
   :type 'string
   :group 'pyimpsort)
 
-(defconst pyimpsort-script
+(defcustom pyimpsort-script
   (expand-file-name "pyimpsort.py"
                     (file-name-directory (if load-in-progress
                                              load-file-name
                                            (buffer-file-name))))
-  "Absolute path of python pyimpsort.py script.")
+  "Absolute path to the Python script `pyimpsort.py`.
+
+This script is used by default when `pyimpsort-command' is not customized."
+  :type 'string
+  :group 'pyimpsort)
+
+(defcustom pyimpsort-command
+  (let* ((exec-path (python-shell-calculate-exec-path)))
+    (mapconcat #'shell-quote-argument
+               (list (executable-find python-shell-interpreter) pyimpsort-script)
+               " "))
+  "Shell command used to launch `pyimpsort`.
+
+If you override this value, `pyimpsort-script' will be ignored.
+Use this if you run Python in a non-standard environment, such as a container:
+
+    docker exec -i my-dev-container sudo -u my-dev-user python3 -m pyimpsort"
+  :type 'string
+  :group 'pyimpsort)
+
+(make-variable-buffer-local 'pyimpsort-command)
 
 (defconst pyimpsort-imports-start-regexp
   (rx (group (and bol (or "import" "from")))))
@@ -109,12 +160,10 @@
 (defun pyimpsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
   (interactive "r")
-  (let* ((exec-path (python-shell-calculate-exec-path))
-         (python-executable (executable-find python-shell-interpreter))
-         (command (format "%s %s" python-executable pyimpsort-script)))
-    (atomic-change-group
-      (or (zerop (shell-command-on-region begin end command nil 'replace pyimpsort-error-buffer-name pyimpsort-display-error-buffer))
-          (error "Command exited abnormally.  See %s for details" pyimpsort-error-buffer-name)))))
+  (atomic-change-group
+    (or (zerop (shell-command-on-region begin end pyimpsort-command nil 'replace
+                                        pyimpsort-error-buffer-name pyimpsort-display-error-buffer))
+        (error "Command exited abnormally.  See %s for details" pyimpsort-error-buffer-name))))
 
 ;;;###autoload
 (defun pyimpsort-buffer ()
