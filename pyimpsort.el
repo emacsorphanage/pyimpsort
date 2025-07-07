@@ -152,32 +152,25 @@ You get:
 
 (make-variable-buffer-local 'pyimpsort-group-module-import)
 
-(defconst pyimpsort-imports-start-regexp
-  (rx (group (and bol (or "import" "from")))))
+(defconst pyimpsort-import-regex
+  "^\\(from .* \\)?import[[:blank:]]*\\(([^)]*)\\|[^()\\\\\n]*\\(\\\\\n[^\\\\\n]*\\)*\\)"
+  "Regular expression matching a Python import statement.")
 
-(defconst pyimpsort-imports-end-regexp
-  (rx (or (and bol (or "import" "from")) (and bol (* space) eol))))
-
-(defun pyimpsort--search-beg-point (&optional end)
-  "Search the first import line until reach the END point."
+(defun pyimpsort--search-import-bounds ()
+  "Return the bounds (BEGIN . END) of the top-level contiguous import block."
   (save-excursion
     (goto-char (point-min))
-    (and (re-search-forward pyimpsort-imports-start-regexp end t)
-         (match-beginning 1))))
-
-(defun pyimpsort--search-end-point (begin)
-  "Search the last import line starting from BEGIN point."
-  (let (end)
-    (save-excursion
-      (goto-char begin)
-      (goto-char (point-at-bol))
-      (catch 'eof
-        (while (re-search-forward pyimpsort-imports-end-regexp (point-at-eol) t)
-          (when (eobp)
-            (throw 'eof "End of file."))
-          (setq end (point-at-eol))
-          (forward-line 1))))
-    end))
+    (when (re-search-forward pyimpsort-import-regex)
+      (let* ((start (match-beginning 0))
+             (end (match-end 0)))
+        (while (progn
+                 (goto-char end)
+                 (when (looking-at "[[:blank:]\n]*")
+                   (goto-char (match-end 0)))
+                 (when (looking-at pyimpsort-import-regex)
+                   (setq end (match-end 0))
+                   t)))
+        (cons start (1+ end))))))
 
 ;;;###autoload
 (defun pyimpsort-region (begin end)
@@ -195,10 +188,9 @@ You get:
 (defun pyimpsort-buffer ()
   "Sort python imports from current buffer."
   (interactive)
-  (let* ((begin (pyimpsort--search-beg-point))
-         (end (and begin (pyimpsort--search-end-point begin))))
-    (when (and begin end)
-      (pyimpsort-region begin end))))
+  (let ((bounds (pyimpsort--search-import-bounds)))
+    (when bounds
+      (pyimpsort-region (car bounds) (cdr bounds)))))
 
 (provide 'pyimpsort)
 
