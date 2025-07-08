@@ -1,0 +1,18 @@
+# -*- coding: utf-8
+
+import time
+from my_module import my_fct
+
+import a, b, c
+
+from other import \
+    fct
+
+from third import (
+    fct1,
+    fct2
+)
+
+fct()
+
+import outside
