@@ -36,8 +36,17 @@
 ;; Add the following snippet to your `init.el':
 ;;
 ;;     (require 'pyimpsort)
+;;
+;; To run `pyimpsort-buffer' manually, you can bind it to a key in `python-mode':
+;;
 ;;     (eval-after-load 'python
-;;       '(define-key python-mode-map "\C-c\C-u" #'pyimpsort-buffer))
+;;       '(define-key python-mode-map (kbd "C-c C-u") #'pyimpsort-buffer))
+;;
+;; To run `pyimpsort-buffer' automatically before saving a Python file:
+;;
+;;     (add-hook 'python-mode-hook
+;;               (lambda ()
+;;                 (add-hook 'before-save-hook #'pyimpsort-buffer nil t)))
 ;;
 ;;; Configuration:
 ;;
