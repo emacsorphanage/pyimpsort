@@ -88,12 +88,20 @@
 ;;
 ;;       (setq pyimpsort-group-platform-site t)
 ;;
+;; - `pyimpsort-local-import'
+;;   A list of module names to arbitrarily place in the "local" import group.
+;;   If left nil, the local module will be inferred by walking up directories
+;;   containing `__init__.py` and returning the top-level package name.
+;;
+;;       (setq pyimpsort-local-import '("myproject"))
+;;
 ;; You can also configure this per project using `.dir-locals.el`:
 ;;
 ;;    ((python-mode
 ;;      . ((pyimpsort-command . "docker exec -i my-container python3 -m pyimpsort")
 ;;         (pyimpsort-group-module-import . t)
-;;         (pyimpsort-group-platform-site . t))))
+;;         (pyimpsort-group-platform-site . t)
+;;         (setq pyimpsort-local-import . ("myproject")))))
 ;;
 ;;
 ;;; Troubleshooting:
@@ -186,6 +194,21 @@ This group is placed before other third-party imports."
 
 (make-variable-buffer-local 'pyimpsort-group-platform-site)
 
+(defcustom pyimpsort-local-import nil
+  "List of module names to treat as local imports.
+
+Modules listed here are considered local to the project and will be grouped
+accordingly, rather than as third-party or system imports.
+
+If set to nil, the local module name is inferred by traversing the directory
+tree upwards from the current file, stopping at the highest-level directory
+that still contains an '__init__.py' file.  The name of that top-level directory
+is used as the local module."
+  :type 'list
+  :group 'pyimpsort)
+
+(make-variable-buffer-local 'pyimpsort-local-import)
+
 (defconst pyimpsort-import-regex
   "^\\(from .* \\)?import[[:blank:]]*\\(([^)]*)\\|[^()\\\\\n]*\\(\\\\\n[^\\\\\n]*\\)*\\)"
   "Regular expression matching a Python import statement.")
@@ -206,6 +229,18 @@ This group is placed before other third-party imports."
                    t)))
         (cons start (1+ end))))))
 
+(defun pyimpsort--get-local ()
+  "Return the top-level package name by walking up directories with __init__.py."
+  (let ((filename (buffer-file-name)))
+    (when filename
+      (let ((dir (file-name-directory filename)))
+        (when (file-exists-p (concat dir "__init__.py"))
+          (while (let ((parent (file-name-directory (directory-file-name dir))))
+                   (when (and (not (equal parent "/"))
+                            (file-exists-p (concat parent "__init__.py")))
+                     (setq dir parent))))
+          (file-name-base (directory-file-name dir)))))))
+
 ;;;###autoload
 (defun pyimpsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
@@ -215,6 +250,13 @@ This group is placed before other third-party imports."
       (setq command (concat command " --group")))
     (when pyimpsort-group-platform-site
       (setq command (concat command " --site")))
+    (if pyimpsort-local-import
+        (setq command (concat command " "
+                              (mapconcat (lambda (x) (format "--local %s" x))
+                                         pyimpsort-local-import " ")))
+      (let ((local (pyimpsort--get-local)))
+        (when local
+          (setq command (concat command " --local " (shell-quote-argument local))))))
     (atomic-change-group
       (or (zerop (shell-command-on-region begin end command nil 'replace
                                           pyimpsort-error-buffer-name pyimpsort-display-error-buffer))

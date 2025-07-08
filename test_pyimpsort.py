@@ -1,6 +1,6 @@
 import io
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -20,6 +20,7 @@ class Args:
     outfile: typing.TextIO
     group: bool = False
     site: bool = False
+    local: list = field(default_factory=list)
 
 
 @pytest.mark.parametrize(

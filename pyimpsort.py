@@ -56,7 +56,19 @@ class ImpSorter(ast.NodeVisitor):
     LOCAL = 4
     RELATIVE = 5
 
-    def __init__(self):
+    def __init__(self, group=False, site=False, user_locals=None):
+        """
+        Initialize the import sorter configuration.
+
+        Args:
+            group (bool): If True, group multiple imports from the same module.
+            site (bool): If True, separate platform site-packages into their own group.
+            user_locals (list[str] or None): List of module names to consider
+                as local imports.
+        """
+        self.group = group
+        self.site = site
+        self.user_locals = user_locals or []
         self.original_nodes = []
         self.imports = set()
         self.from_imports = defaultdict(set)
@@ -126,6 +138,8 @@ class ImpSorter(ast.NodeVisitor):
         modname = name[0].split('.')[0]
         if level != 0:
             group = self.RELATIVE
+        elif modname in self.user_locals:
+            group = self.LOCAL
         elif modname == '__future__':
             group = self.FUTURE
         elif modname in self.stdlibs:
@@ -140,7 +154,7 @@ class ImpSorter(ast.NodeVisitor):
                     if x
                 )
                 origin = pathlib.Path(spec.origin or "/")
-                if any(
+                if self.site and any(
                     origin.is_relative_to(pathlib.Path(sysconfig.get_path(x)))
                     for x in ("purelib", "platlib")
                 ):
@@ -203,7 +217,7 @@ class ImpSorter(ast.NodeVisitor):
         lines.append(")")
         return "\n".join(lines)
 
-    def write_sorted(self, file=sys.stdout, group=False, site=False):
+    def write_sorted(self, file=sys.stdout):
         """
         Write sorted imports to file.
 
@@ -211,8 +225,6 @@ class ImpSorter(ast.NodeVisitor):
         group: if True, group import from same module
         site: if True, separate group for plateform site-packages
         """
-        if not site:
-            self.THIRD_PARTY = self.SITE
         pkey = None
         for key, node in sorted(self.new_nodes()):
             # insert new lines between groups
@@ -223,7 +235,7 @@ class ImpSorter(ast.NodeVisitor):
                 file.write(self.format_import(node))
                 file.write("\n")
             else:
-                if group:
+                if self.group:
                     file.write(self.format_import_from(node))
                     file.write("\n")
                 else:
@@ -278,14 +290,21 @@ def parse_args(argv):
         help="Create a separate group for modules installed in the platform's "
         "site-packages directory.",
     )
+    parser.add_argument(
+        "--local",
+        action="append",
+        default=[],
+        metavar="MODULE",
+        help="Mark MODULE as a local import. Can be specified multiple times.",
+    )
     return parser.parse_args(argv)
 
 
 def pyimpsort(args):
     tree = ast.parse(args.infile.read())
-    i = ImpSorter()
+    i = ImpSorter(group=args.group, site=args.site, user_locals=args.local)
     i.visit(tree)
-    i.write_sorted(args.outfile, group=args.group, site=args.site)
+    i.write_sorted(args.outfile)
 
 
 def main():
