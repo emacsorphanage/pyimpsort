@@ -139,22 +139,15 @@
   :type 'string
   :group 'pyimpsort)
 
-(defcustom pyimpsort-script
-  (expand-file-name "pyimpsort.py"
-                    (file-name-directory (if load-in-progress
-                                             load-file-name
-                                           (buffer-file-name))))
-  "Absolute path to the Python script `pyimpsort.py`.
+(defcustom pyimpsort-script "pyimpsort.py"
+  "Path to the `pyimpsort.py' script.
 
-This script is used by default when `pyimpsort-command' is not customized."
+This script is used by default when `pyimpsort-command' is not customized.
+If relative, it is resolved with respect to the location of the Emacs Lisp file."
   :type 'string
   :group 'pyimpsort)
 
-(defcustom pyimpsort-command
-  (let* ((exec-path (python-shell-calculate-exec-path)))
-    (mapconcat #'shell-quote-argument
-               (list (executable-find python-shell-interpreter) pyimpsort-script)
-               " "))
+(defcustom pyimpsort-command nil
   "Shell command used to launch `pyimpsort`.
 
 If you override this value, `pyimpsort-script' will be ignored.
@@ -209,6 +202,10 @@ is used as the local module."
 
 (make-variable-buffer-local 'pyimpsort-local-import)
 
+(defconst pyimpsort-script-path
+  (file-name-directory (or load-file-name (buffer-file-name)))
+  "Répertoire d'installation de `pyimpsort.el`.")
+
 (defconst pyimpsort-import-regex
   "^\\(from .* \\)?import[[:blank:]]*\\(([^)]*)\\|[^()\\\\\n]*\\(\\\\\n[^\\\\\n]*\\)*\\)"
   "Regular expression matching a Python import statement.")
@@ -241,11 +238,24 @@ is used as the local module."
                      (setq dir parent))))
           (file-name-base (directory-file-name dir)))))))
 
+(defun pyimpsort--get-command ()
+  "Return the shell command to run pyimpsort."
+  (or pyimpsort-command
+      (let* ((exec-path (python-shell-calculate-exec-path))
+             (python-exec (executable-find "python3"))
+             (script (when pyimpsort-script
+                       (let ((fullpath (expand-file-name pyimpsort-script pyimpsort-script-path)))
+                         (when (file-exists-p fullpath)
+                           fullpath)))))
+        (if (and python-exec script)
+            (mapconcat #'shell-quote-argument (list python-exec script) " ")
+          (user-error "Cannot find Python interpreter or the pyimpsort.py script")))))
+
 ;;;###autoload
 (defun pyimpsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
   (interactive "r")
-  (let ((command pyimpsort-command)
+  (let ((command (pyimpsort--get-command))
         (err-buf (get-buffer pyimpsort-error-buffer-name)))
     (unless err-buf
       (setq err-buf (get-buffer-create pyimpsort-error-buffer-name))
