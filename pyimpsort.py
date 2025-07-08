@@ -19,6 +19,7 @@ References:
 import argparse
 import ast
 import importlib.util
+import pathlib
 import shutil
 import sys
 import sysconfig
@@ -50,9 +51,10 @@ class ImpSorter(ast.NodeVisitor):
     # Groups of import statements
     FUTURE = 0
     STDLIB = 1
-    THIRD_PARTY = 2
-    LOCAL = 3
-    RELATIVE = 4
+    SITE = 2
+    THIRD_PARTY = 3
+    LOCAL = 4
+    RELATIVE = 5
 
     def __init__(self):
         self.original_nodes = []
@@ -105,9 +107,6 @@ class ImpSorter(ast.NodeVisitor):
             if importlib.util.find_spec(module_name) is not None:
                 yield module_name
 
-    def is_thirdparty(self, modname):
-        return any(importlib.util.find_spec(modname, p) for p in self.python_paths)
-
     # :: Node -> Key
     def _node_sort_key(self, node):
         """
@@ -131,10 +130,25 @@ class ImpSorter(ast.NodeVisitor):
             group = self.FUTURE
         elif modname in self.stdlibs:
             group = self.STDLIB
-        elif self.is_thirdparty(modname):
-            group = self.THIRD_PARTY
         else:
-            group = self.LOCAL
+            try:
+                spec = next(
+                    x
+                    for x in (
+                        importlib.util.find_spec(modname, p) for p in self.python_paths
+                    )
+                    if x
+                )
+                origin = pathlib.Path(spec.origin or "/")
+                if any(
+                    origin.is_relative_to(pathlib.Path(sysconfig.get_path(x)))
+                    for x in ("purelib", "platlib")
+                ):
+                    group = self.SITE
+                else:
+                    group = self.THIRD_PARTY
+            except StopIteration:
+                group = self.LOCAL
         return (group, level, fromimport, name)
 
     def new_nodes(self):
@@ -189,13 +203,16 @@ class ImpSorter(ast.NodeVisitor):
         lines.append(")")
         return "\n".join(lines)
 
-    def write_sorted(self, file=sys.stdout, group=False):
+    def write_sorted(self, file=sys.stdout, group=False, site=False):
         """
         Write sorted imports to file.
 
         file: a file-like object (stream).
         group: if True, group import from same module
+        site: if True, separate group for plateform site-packages
         """
+        if not site:
+            self.THIRD_PARTY = self.SITE
         pkey = None
         for key, node in sorted(self.new_nodes()):
             # insert new lines between groups
@@ -254,6 +271,13 @@ def parse_args(argv):
         help="Group multiple imports from the same module into a single "
         "'from ... import ...' statement",
     )
+    parser.add_argument(
+        "--site",
+        action="store_true",
+        default=False,
+        help="Create a separate group for modules installed in the platform's "
+        "site-packages directory.",
+    )
     return parser.parse_args(argv)
 
 
@@ -261,7 +285,7 @@ def pyimpsort(args):
     tree = ast.parse(args.infile.read())
     i = ImpSorter()
     i.visit(tree)
-    i.write_sorted(args.outfile, group=args.group)
+    i.write_sorted(args.outfile, group=args.group, site=args.site)
 
 
 def main():

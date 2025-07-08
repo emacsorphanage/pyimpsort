@@ -80,11 +80,20 @@
 ;;
 ;;       (setq pyimpsort-group-module-import t)
 ;;
+;; - `pyimpsort-group-platform-site'
+;;   If non-nil, group platform-level site-packages (e.g. system-wide
+;;   installations) separately from other third-party imports. These are
+;;   placed before third-party group. This adds the `--site` option to the
+;;   command line.
+;;
+;;       (setq pyimpsort-group-platform-site t)
+;;
 ;; You can also configure this per project using `.dir-locals.el`:
 ;;
 ;;    ((python-mode
 ;;      . ((pyimpsort-command . "docker exec -i my-container python3 -m pyimpsort")
-;;         (pyimpsort-group-module-import . t))))
+;;         (pyimpsort-group-module-import . t)
+;;         (pyimpsort-group-platform-site . t))))
 ;;
 ;;
 ;;; Troubleshooting:
@@ -164,6 +173,19 @@ You get:
 
 (make-variable-buffer-local 'pyimpsort-group-module-import)
 
+(defcustom pyimpsort-group-platform-site nil
+  "Group platform site-packages separately from other third-party imports.
+
+When non-nil, modules found in the platform's site-packages directory
+\(e.g., system-level installations) are grouped separately from other
+third-party modules such as those installed in the user base.
+
+This group is placed before other third-party imports."
+  :type 'boolean
+  :group 'pyimpsort)
+
+(make-variable-buffer-local 'pyimpsort-group-platform-site)
+
 (defconst pyimpsort-import-regex
   "^\\(from .* \\)?import[[:blank:]]*\\(([^)]*)\\|[^()\\\\\n]*\\(\\\\\n[^\\\\\n]*\\)*\\)"
   "Regular expression matching a Python import statement.")
@@ -191,6 +213,8 @@ You get:
   (let ((command pyimpsort-command))
     (when pyimpsort-group-module-import
       (setq command (concat command " --group")))
+    (when pyimpsort-group-platform-site
+      (setq command (concat command " --site")))
     (atomic-change-group
       (or (zerop (shell-command-on-region begin end command nil 'replace
                                           pyimpsort-error-buffer-name pyimpsort-display-error-buffer))

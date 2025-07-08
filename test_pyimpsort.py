@@ -19,6 +19,7 @@ class Args:
     infile: typing.TextIO
     outfile: typing.TextIO
     group: bool = False
+    site: bool = False
 
 
 @pytest.mark.parametrize(
