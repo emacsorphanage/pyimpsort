@@ -25,6 +25,9 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+;; The companion script `pyimpsort.py` is distributed under the MIT License.
+;; See the header of that file for details.
+
 ;;; Commentary:
 ;;
 ;; `pyimpsort.el' sort the python imports of a file.

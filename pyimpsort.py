@@ -11,6 +11,11 @@ References:
 - Reddit Python Import Guidelines: https://github.com/reddit/reddit/wiki/PythonImportGuidelines
 - Google Python Style Guide: https://google.github.io/styleguide/pyguide.html#Imports
 """
+
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2014-2025 The pyimpsort contributors
+# See LICENSE-MIT for license details
+
 import argparse
 import ast
 import importlib.util
