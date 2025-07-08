@@ -129,7 +129,7 @@
   :prefix "pyimpsort-"
   :group 'applications)
 
-(defcustom pyimpsort-display-error-buffer nil
+(defcustom pyimpsort-display-error-buffer t
   "Display error buffer on error."
   :type 'boolean
   :group 'pyimpsort)
@@ -245,7 +245,16 @@ is used as the local module."
 (defun pyimpsort-region (begin end)
   "Sort python imports from region BEGIN to END points."
   (interactive "r")
-  (let ((command pyimpsort-command))
+  (let ((command pyimpsort-command)
+        (err-buf (get-buffer pyimpsort-error-buffer-name)))
+    (unless err-buf
+      (setq err-buf (get-buffer-create pyimpsort-error-buffer-name))
+      (with-current-buffer err-buf
+        (let ((map (make-sparse-keymap)))
+          (define-key map (kbd "q") #'quit-window)
+          (use-local-map map))))
+    (with-current-buffer err-buf
+      (setq buffer-read-only nil))
     (when pyimpsort-group-module-import
       (setq command (concat command " --group")))
     (when pyimpsort-group-platform-site
@@ -258,9 +267,15 @@ is used as the local module."
         (when local
           (setq command (concat command " --local " (shell-quote-argument local))))))
     (atomic-change-group
-      (or (zerop (shell-command-on-region begin end command nil 'replace
-                                          pyimpsort-error-buffer-name pyimpsort-display-error-buffer))
-          (error "Command exited abnormally.  See %s for details" pyimpsort-error-buffer-name)))))
+      (let ((exit-code (shell-command-on-region begin end command nil 'replace err-buf)))
+        (with-current-buffer err-buf
+          (goto-char (point-max))
+          (setq buffer-read-only t))
+        (when (not (zerop exit-code))
+          (when pyimpsort-display-error-buffer
+            (pop-to-buffer err-buf))
+          (user-error "Command '%s' failed.  See buffer '%s' for details"
+                      command pyimpsort-error-buffer-name))))))
 
 ;;;###autoload
 (defun pyimpsort-buffer ()
