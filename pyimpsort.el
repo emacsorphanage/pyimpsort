@@ -217,7 +217,7 @@ is used as the local module."
   "Return the bounds (BEGIN . END) of the top-level contiguous import block."
   (save-excursion
     (goto-char (point-min))
-    (when (re-search-forward pyimpsort-import-regex)
+    (when (re-search-forward pyimpsort-import-regex nil t)
       (let* ((start (match-beginning 0))
              (end (match-end 0)))
         (while (progn
