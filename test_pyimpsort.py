@@ -1,17 +1,23 @@
-# -*- coding: utf-8 -*-
-import ast
 import io
+import typing
 from dataclasses import dataclass
 
 import pytest
 
-from pyimpsort import ImpSorter
+from pyimpsort import pyimpsort
 
 
 @dataclass
 class TestCase:
     infname: str
     outfname: str
+    group: bool = False
+
+
+@dataclass
+class Args:
+    infile: typing.TextIO
+    outfile: typing.TextIO
     group: bool = False
 
 
@@ -33,8 +39,5 @@ class TestCase:
 )
 def test_sort_import(test_case):
     with io.open(test_case.infname) as fin, io.open(test_case.outfname) as fout, io.StringIO() as res:
-        tree = ast.parse(fin.read())
-        i = ImpSorter()
-        i.visit(tree)
-        i.write_sorted(res, test_case.group)
+        pyimpsort(Args(fin, res, test_case.group))
         assert res.getvalue().split("\n") == fout.read().split("\n")

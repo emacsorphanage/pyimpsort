@@ -1,30 +1,24 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-impsort.py
-==========
-Sort python imports. Based on vim-sort-python-imports_
+pyimpsort.py --- Python import sorter
 
-Links
------
-+ https://www.python.org/dev/peps/pep-0008/#imports
-+ https://github.com/reddit/reddit/wiki/PythonImportGuidelines
-+ https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Imports
+This module sorts Python import statements.
 
-.. _vim-sort-python-imports: https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py
+It is inspired by the Vim plugin 'vim-sort-python-imports'
+(https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py)
+
+References:
+- PEP 8 — Style Guide for Python Code: https://www.python.org/dev/peps/pep-0008/#imports
+- Reddit Python Import Guidelines: https://github.com/reddit/reddit/wiki/PythonImportGuidelines
+- Google Python Style Guide: https://google.github.io/styleguide/pyguide.html#Imports
 """
-from __future__ import print_function
-
 import argparse
 import ast
+import importlib.util
+import shutil
 import sys
-if sys.version_info < (3, 4):
-    import imp
-    import pkgutil
-else:
-    import importlib.util
-from collections import defaultdict
 import sysconfig
+import textwrap
+from collections import defaultdict
 from glob import glob1
 from os import path, scandir
 
@@ -33,13 +27,6 @@ def _clean_ext_suffix(libname):
     # See: https://www.python.org/dev/peps/pep-3149/
     ext_suffix = sysconfig.get_config_var('EXT_SUFFIX') or '.so'
     return libname.replace(ext_suffix, '')
-
-
-def _get_python_lib(standard_lib=True):
-    if standard_lib:
-        return sysconfig.get_path("stdlib")
-    else:
-        return sysconfig.get_path("purelib")
 
 
 class ImpSorter(ast.NodeVisitor):
@@ -91,16 +78,10 @@ class ImpSorter(ast.NodeVisitor):
     def get_dynlibs():
         dirname = path.join(sysconfig.get_path("stdlib"), "lib-dynload")
         dynlibs = glob1(dirname, '*.so')
-        return map(_clean_ext_suffix, dynlibs)
+        return [_clean_ext_suffix(x) for x in dynlibs]
 
     @staticmethod
-    def _iter_stdmodules_deprecated():
-        stdlib_path = _get_python_lib(standard_lib=True)
-        importer = pkgutil.ImpImporter(stdlib_path)
-        return (m for m, _ in importer.iter_modules())
-
-    @staticmethod
-    def _iter_stdmodules_new():
+    def iter_stdmodules():
         # note this misses some edge cases that the original ImpImporter covered, i.e., namespace packages
         # but works for the majority of common packages
         stdlib_path = sysconfig.get_path('stdlib')
@@ -119,35 +100,8 @@ class ImpSorter(ast.NodeVisitor):
             if importlib.util.find_spec(module_name) is not None:
                 yield module_name
 
-    @staticmethod
-    def iter_stdmodules():
-        if sys.version_info < (3, 4):
-            return ImpSorter._iter_stdmodules_deprecated()
-        else:
-            return ImpSorter._iter_stdmodules_new()
-
-    def _is_thirdparty_deprecated(self, modname):
-        try:
-            imp.find_module(modname, self.python_paths)
-            thirdparty = True
-        except ImportError:
-            thirdparty = False
-        return thirdparty
-
-    def _is_thirdparty_new(self, modname):
-        for path in self.python_paths:
-            spec = importlib.util.find_spec(modname, path)
-            if spec is not None:
-                return True
-        return False
-
     def is_thirdparty(self, modname):
-        # for older python
-        if sys.version_info < (3, 4):
-            return self._is_thirdparty_deprecated(modname)
-        # newer python (imp package doesn't exist in python 3.12+)
-        else:
-            return self._is_thirdparty_new(modname)
+        return any(importlib.util.find_spec(modname, p) for p in self.python_paths)
 
     # :: Node -> Key
     def _node_sort_key(self, node):
@@ -235,7 +189,7 @@ class ImpSorter(ast.NodeVisitor):
         Write sorted imports to file.
 
         file: a file-like object (stream).
-        group:
+        group: if True, group import from same module
         """
         pkey = None
         for key, node in sorted(self.new_nodes()):
@@ -262,27 +216,51 @@ class ImpSorter(ast.NodeVisitor):
                         file.write("\n")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Python sort imports.")
-    parser.add_argument(
-        "infile", nargs="?", type=argparse.FileType("r"), default=sys.stdin
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Sort import statements in a Python file.\n\n"
+            + textwrap.fill(
+                "Only the top contiguous block of imports is considered and "
+                "written to the output; the rest of the code is ignored.",
+                width=shutil.get_terminal_size(fallback=(80, 20)).columns,
+            )
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "outfile", nargs="?", type=argparse.FileType("w"), default=sys.stdout
+        "infile",
+        nargs="?",
+        type=argparse.FileType("r"),
+        default=sys.stdin,
+        help="Input Python file to sort imports from (defaults to stdin if not provided)",
+    )
+    parser.add_argument(
+        "outfile",
+        nargs="?",
+        type=argparse.FileType("w"),
+        default=sys.stdout,
+        help="Output file to write the sorted result to (defaults to stdout if not provided)",
     )
     parser.add_argument(
         "--group",
         action="store_true",
         default=False,
-        help="Group from ... import statement",
+        help="Group multiple imports from the same module into a single "
+        "'from ... import ...' statement",
     )
+    return parser.parse_args(argv)
 
-    args = parser.parse_args()
-    with args.infile as infile, args.outfile as outfile:
-        tree = ast.parse(infile.read())
-        i = ImpSorter()
-        i.visit(tree)
-        i.write_sorted(outfile, group=args.group)
+
+def pyimpsort(args):
+    tree = ast.parse(args.infile.read())
+    i = ImpSorter()
+    i.visit(tree)
+    i.write_sorted(args.outfile, group=args.group)
+
+
+def main():
+    pyimpsort(parse_args(sys.argv[1:]))
 
 
 if __name__ == '__main__':
