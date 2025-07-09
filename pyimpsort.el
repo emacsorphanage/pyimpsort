@@ -244,7 +244,10 @@ is used as the local module."
       (let* ((exec-path (python-shell-calculate-exec-path))
              (python-exec (executable-find "python3"))
              (script (when pyimpsort-script
-                       (let ((fullpath (expand-file-name pyimpsort-script pyimpsort-script-path)))
+                       (let ((fullpath (if (file-name-absolute-p pyimpsort-script)
+                                           pyimpsort-script
+                                         (expand-file-name pyimpsort-script
+                                                           pyimpsort-script-path))))
                          (when (file-exists-p fullpath)
                            fullpath)))))
         (if (and python-exec script)
