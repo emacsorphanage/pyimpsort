@@ -1,0 +1,18 @@
+from datetime import \
+    ( \
+      datetime, # toto
+      timedelta,
+     ) \
+     \
+
+# Next import time module
+import \
+time # why ?
+
+
+# Comment
+
+   # Comment with spaces
+
+import os
+# last comment

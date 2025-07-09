@@ -209,25 +209,24 @@ is used as the local module."
   (file-name-directory (or load-file-name (buffer-file-name)))
   "Répertoire d'installation de `pyimpsort.el`.")
 
-(defconst pyimpsort-import-regex
-  "^\\(from .* \\)?import[[:blank:]]*\\(([^)]*)\\|[^()\\\\\n]*\\(\\\\\n[^\\\\\n]*\\)*\\)"
-  "Regular expression matching a Python import statement.")
-
 (defun pyimpsort--search-import-bounds ()
   "Return the bounds (BEGIN . END) of the top-level contiguous import block."
   (save-excursion
     (goto-char (point-min))
-    (when (re-search-forward pyimpsort-import-regex nil t)
-      (let* ((start (match-beginning 0))
-             (end (match-end 0)))
+    (when (re-search-forward "^\\(from\\|import\\) " nil t)
+      (beginning-of-line)
+      (let ((start (point))
+            (end (point)))
         (while (progn
-                 (goto-char end)
-                 (when (looking-at "[[:blank:]\n]*")
-                   (goto-char (match-end 0)))
-                 (when (looking-at pyimpsort-import-regex)
-                   (setq end (match-end 0))
-                   t)))
-        (cons start (1+ end))))))
+                 (while (when (looking-at-p "^[[:blank:]]*\\(#[^\n]*\\)?$")
+                          (let ((cur (point)))
+                            (forward-line)
+                            (/= cur (point)))))
+                 (when (looking-at-p "^\\(from\\|import\\) ")
+                   (python-nav-end-of-statement)
+                   (forward-line)
+                   (setq end (point)))))
+        (cons start end)))))
 
 (defun pyimpsort--get-local ()
   "Return the top-level package name by walking up directories with __init__.py."

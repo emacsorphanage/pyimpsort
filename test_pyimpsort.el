@@ -51,6 +51,13 @@ Optional BINDINGS is an alist of variable settings active during the test."
  ((pyimpsort-group-module-import t))
  )
 
+(pyimpsort--define-test
+ pyimpsort-test-4
+ "samples/el/4.in"
+ "samples/el/4.out"
+ ((pyimpsort-group-module-import t))
+ )
+
 (provide 'test_pyimpsort)
 
 ;;; test_pyimpsort.el ends here
