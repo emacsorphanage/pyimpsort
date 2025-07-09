@@ -6,7 +6,7 @@
 ;; Author: Mario Rodas <marsam@users.noreply.github.com>
 ;; Maintainer: Alain Delplanque <alaindelplanque@mailoo.org>
 ;; URL: https://github.com/emacsorphanage/pyimpsort
-;; Package-Version: 0.0.1
+;; Package-Version: 0.1.0
 ;; Package-Requires: ((emacs "24.3") (python))
 ;; Keywords: tools, python, convenience
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -106,7 +106,6 @@
 ;;         (pyimpsort-group-platform-site . t)
 ;;         (setq pyimpsort-local-import . ("myproject")))))
 ;;
-;;
 ;;; Troubleshooting:
 ;;
 ;; + **Doesn't sort correctly third party libraries**
@@ -122,6 +121,19 @@
 ;; + [isort][] ([emacs integration](https://github.com/paetzke/py-isort.el))
 ;;
 ;; [isort]: https://github.com/timothycrosley/isort
+;;
+;;; ChangeLog:
+;;
+;; Version 0.1.0 (2025-07-10)
+;;
+;; - Added: `pyimpsort-local-import` — force specific modules to be treated as
+;;   local
+;; - Added: `pyimpsort-group-platform-site` — separate platform site-packages
+;;   from other third-party imports
+;; - Added: `pyimpsort-group-module-import` — group multiple imports from the
+;;   same module into a single statement
+;; - Fixed: improved detection of multi-line import blocks
+;; - Fixed: preserve comments adjacent to import statements when sorting
 
 ;;; Code:
 
