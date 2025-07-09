@@ -1,0 +1,18 @@
+import os  # comment os
+from datetime import datetime, timedelta  # comment timedelta
+
+# isolated comment
+
+import abc
+
+
+import os # duplicated os
+
+
+# subprocess is better than os.system
+from subprocess import (Popen, # why ?
+                        STDOUT, STDERR, # used ?
+                        PIPE)
+# DEVNULL has been forgotten
+from subprocess import DEVNULL
+from subprocess import Popen  # duplicated Popen

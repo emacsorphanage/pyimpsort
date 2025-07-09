@@ -18,13 +18,15 @@ References:
 
 import argparse
 import ast
+import functools
 import importlib.util
+import itertools
 import pathlib
+import re
 import shutil
 import sys
 import sysconfig
 import textwrap
-from collections import defaultdict
 from glob import glob1
 from os import path, scandir
 
@@ -35,20 +37,22 @@ def _clean_ext_suffix(libname):
     return libname.replace(ext_suffix, '')
 
 
-class ImpSorter(ast.NodeVisitor):
+class ImpSorter:
     """
-    This class visits all the import nodes at the root of tree
-    and generates new import nodes that are sorted according to the Google
-    and PEP8 coding guidelines.
+    Sorts Python import statements according to PEP8 and Google style guidelines.
 
-    In practice this means that they are sorted according to this tuple.
+    Organizes imports into groups:
+        - FUTURE
+        - STDLIB
+        - SITE (optional)
+        - THIRD_PARTY
+        - LOCAL
+        - RELATIVE
 
-        (stdlib, site_packages, names)
-
-    We also make sure only 1 name is imported per import statement.
+    Also ensures a single import per line and supports merging multiple imports
+    from the same module, if configured.
     """
 
-    # Groups of import statements
     FUTURE = 0
     STDLIB = 1
     SITE = 2
@@ -69,32 +73,59 @@ class ImpSorter(ast.NodeVisitor):
         self.group = group
         self.site = site
         self.user_locals = user_locals or []
-        self.original_nodes = []
-        self.imports = set()
-        self.from_imports = defaultdict(set)
+        self.imports = {}
+        self.from_imports = {}
         self.stdlibs = set(self.iter_stdmodules()) | set(self.get_dynlibs()) | set(sys.builtin_module_names)
         self.python_paths = [p for p in sys.path if p]
 
-    def visit_Import(self, node):
-        if node.col_offset != 0:
-            return
-        self.imports.update((nm.name, nm.asname) for nm in node.names)
-        self.original_nodes.append(node)
-
-    def visit_ImportFrom(self, node):
-        if node.col_offset != 0:
-            return
-        # we need to group the names imported from each module
-        # into single from X import N,M,P,... groups so we store the names
-        # and regenerate the node when we find more
-        # we'll then insert this into the full imports chain when we're done
-        self.from_imports[(node.level, node.module)].update(
-            (nm.name, nm.asname) for nm in node.names
+    def _merge_comment(self, alias1, alias2):
+        comment = " ".join(
+            x
+            for x in (getattr(alias, "comment", None) for alias in (alias1, alias2))
+            if x
         )
-        self.original_nodes.append(node)
+        if comment:
+            alias1.comment = comment
+
+    def append(self, node):
+        """
+        Add an import or import-from AST node to the sorter, merging duplicates,
+        preserving comments, and ensuring that imports are split into
+        individual (unitary) statements.
+
+        Args:
+            node (ast.Import or ast.ImportFrom): The AST node to process.
+        """
+        if isinstance(node, ast.Import):
+            for idx, alias in enumerate(node.names):
+                simple_node = self.imports.get((alias.name, alias.asname))
+                if simple_node:
+                    self._merge_comment(simple_node.names[0], alias)
+                else:
+                    simple_node = ast.Import(names=[alias], comments=[])
+                    self.imports[(alias.name, alias.asname)] = simple_node
+                if idx == 0:
+                    simple_node.comments = node.comments + simple_node.comments
+        else:
+            for idx, alias in enumerate(node.names):
+                simple_node = self.from_imports.get(
+                    (node.level, node.module, alias.name, alias.asname)
+                )
+                if simple_node:
+                    self._merge_comment(simple_node.names[0], alias)
+                else:
+                    simple_node = ast.ImportFrom(
+                        level=node.level, module=node.module, names=[alias], comments=[]
+                    )
+                    self.from_imports[
+                        (node.level, node.module, alias.name, alias.asname)
+                    ] = simple_node
+                if idx == 0:
+                    simple_node.comments = node.comments + simple_node.comments
 
     @staticmethod
     def get_dynlibs():
+        """Return dynamic standard libraries (compiled extensions)."""
         dirname = path.join(sysconfig.get_path("stdlib"), "lib-dynload")
         dynlibs = glob1(dirname, '*.so')
         return [_clean_ext_suffix(x) for x in dynlibs]
@@ -119,24 +150,25 @@ class ImpSorter(ast.NodeVisitor):
             if importlib.util.find_spec(module_name) is not None:
                 yield module_name
 
-    # :: Node -> Key
     def _node_sort_key(self, node):
         """
         Given an AST node return a tuple which is used for sorting.
         """
-        level = getattr(node, "level", 0)
         if isinstance(node, ast.Import):
-            name = tuple(
+            sortname = tuple(
                 x for x in (node.names[0].name, node.names[0].asname) if x is not None
             )
             fromimport = 0
         elif isinstance(node, ast.ImportFrom):
-            name = (node.module or "", )
+            sortname = tuple(
+                x for x in (node.module or "", node.names[0].name, node.names[0].asname) if x is not None
+            )
             fromimport = 1
         else:
             raise TypeError(node)
-        modname = name[0].split('.')[0]
-        if level != 0:
+
+        modname = sortname[0].split('.')[0]
+        if getattr(node, "level", 0) != 0:
             group = self.RELATIVE
         elif modname in self.user_locals:
             group = self.LOCAL
@@ -163,47 +195,73 @@ class ImpSorter(ast.NodeVisitor):
                     group = self.THIRD_PARTY
             except StopIteration:
                 group = self.LOCAL
-        return (group, level, fromimport, name)
+        return (group, fromimport, sortname)
 
-    def new_nodes(self):
-        """
-        Generate a list of tuples with the form `(Key, Node)`.
-        """
-        nodes = [
-            ast.Import(names=[ast.alias(name=nm, asname=asnm)])
-            for nm, asnm in self.imports
-        ]
-        # from ... import are groups into single statement
-        nodes.extend(
-            ast.ImportFrom(
-                module=module,
-                names=[ast.alias(name=nm, asname=asnm) for nm, asnm in sorted(names)],
-                level=level,
-            )
-            for (level, module), names in self.from_imports.items()
-        )
-        return [(self._node_sort_key(node), node) for node in nodes]
+    def _format_as(self, name, asname, comment):
+        res = name
+        if asname:
+            res += f" as {asname}"
+        if comment:
+            res += f"  #{comment}"
+        return res
 
     def format_import(self, node):
+        """Format a single 'import ...' AST node."""
+        lines = [f"#{comment}" for comment in node.comments]
         alias = node.names[0]
-        s = f"import {alias.name}"
-        if alias.asname:
-            s += f" as {alias.asname}"
-        return s
+        lines.append(
+            "import "
+            + self._format_as(alias.name, alias.asname, getattr(alias, "comment", None))
+        )
+        return lines
 
     def format_import_from(self, node):
         """
-        Format statement associated to a ast.ImportFrom 'node'.
+        Format an `ast.ImportFrom` node into a properly formatted list of lines.
+
+        Tries to fit one-liners under 80 characters, otherwise uses multiline syntax.
+        Preserves inline comments.
         """
+        node.names.sort(key=lambda x: (x.name, x.asname or ""))
+        lines = [f"#{comment}" for comment in node.comments]
+        frompart = f"from {'.' * node.level}{node.module or ''} import "
+        names = node.names
+        if len(names) == 1:
+            alias = node.names[0]
+            lines.append(
+                frompart
+                + self._format_as(
+                    alias.name, alias.asname, getattr(alias, "comment", None)
+                )
+            )
+            return lines
+
+        if any(getattr(alias, "comment", None) for alias in node.names):
+            # At least one alias has an inline comment
+            lines.append(f"{frompart} (")
+            for alias in node.names:
+                line = f"    {alias.name}"
+                if alias.asname:
+                    line += f" as {alias.asname}"
+                line += ","
+                comment = getattr(alias, "comment", None)
+                if comment:
+                    line += f"  #{comment}"
+                lines.append(line)
+            lines.append(")")
+            return lines
+
         fullnames = [
             " as ".join(nm for nm in (name.name, name.asname) if nm)
             for name in node.names
         ]
-        res = f"from {'.' * node.level}{node.module or ''} import "
-        if len(res) + sum(len(x) for x in fullnames) + (len(fullnames) - 1) * 2 <= 80:
-            return res + ", ".join(fullnames)
-        # Need to split into multiples lines
-        lines = [res + "("]
+        if len(frompart) + sum(len(x) for x in fullnames) + (len(fullnames) - 1) * 2 <= 80:
+            # One-liner is short enough to fit within 80 characters
+            lines.append(frompart + ", ".join(fullnames))
+            return lines
+
+        # Multiline formatting fallback
+        lines.append(frompart + "(")
         toks = [x + "," for x in fullnames[:-1]]
         toks.append(fullnames[-1])
         line = "   "
@@ -215,39 +273,112 @@ class ImpSorter(ast.NodeVisitor):
                 line = f"    {tok}"
         lines.append(line)
         lines.append(")")
-        return "\n".join(lines)
+        return lines
+
+    def _merge_from_import(self, a, b):
+        a.comments.extend(b.comments)
+        a.names.extend(b.names)
+        return a
 
     def write_sorted(self, file=sys.stdout):
         """
-        Write sorted imports to file.
+        Write the sorted and formatted import statements to a file-like object.
 
-        file: a file-like object (stream).
-        group: if True, group import from same module
-        site: if True, separate group for plateform site-packages
+        Args:
+            file: Output stream to write sorted import block.
         """
+        nodes = list(self.imports.values())
+        if self.group:
+            for module, group in itertools.groupby(
+                sorted(self.from_imports.items()), key=lambda x: x[0][:2]
+            ):
+                nodes.append(
+                    functools.reduce(self._merge_from_import, (n[1] for n in group))
+                )
+        else:
+            nodes.extend(self.from_imports.values())
+
         pkey = None
-        for key, node in sorted(self.new_nodes()):
+        for key, node in sorted((self._node_sort_key(node), node) for node in nodes):
             # insert new lines between groups
             if pkey and key[0] != pkey[0]:
                 file.write("\n")
             pkey = key
             if isinstance(node, ast.Import):
-                file.write(self.format_import(node))
-                file.write("\n")
+                lines = self.format_import(node)
             else:
-                if self.group:
-                    file.write(self.format_import_from(node))
-                    file.write("\n")
-                else:
-                    for alias in node.names:
-                        file.write(
-                            self.format_import_from(
-                                ast.ImportFrom(
-                                    module=node.module, level=node.level, names=[alias]
-                                )
-                            )
-                        )
-                        file.write("\n")
+                lines = self.format_import_from(node)
+            for line in lines:
+                file.write(line + "\n")
+
+
+comment_regex = re.compile(r"^(?P<before>[^#]*)(#(?P<comment>.*))?$")
+alias_regex = re.compile(r"(?P<name>\w+)(\s+as\s+(?P<asname>\w+))?,?\s*$")
+
+
+def set_comment(node, lines):
+    """
+    Extracts inline and leading comments from the given source lines and attaches
+    them to the appropriate parts of the AST import node.
+
+    Args:
+        node (ast.Import or ast.ImportFrom): The AST node to update.
+        lines (list[str]): Corresponding lines from the source code.
+    """
+    node.comments = []
+    for line in lines:
+        m = comment_regex.match(line)
+        if not m.group("comment"):
+            continue
+        comment = m.group("comment")
+        if not comment:
+            continue
+        m = alias_regex.search(m.group("before"))
+        if m:
+            name = m.group("name")
+            asname = m.group("asname")
+            alias = next(x for x in node.names if x.name == name and x.asname == asname)
+            alias.comment = comment
+        else:
+            node.comments.append(comment)
+
+
+def iter_blocks(nodes, src, sorter_factory):
+    """
+    Iterate over top-level blocks of import statements.
+
+    Groups together adjacent import statements and applies the sorter.
+
+    Args:
+        nodes: List of top-level AST nodes.
+        src: List of lines from the source file.
+        sorter_factory: Function that returns a new ImpSorter instance.
+
+    Yields:
+        ImpSorter: A sorter instance for each block of contiguous imports.
+    """
+    node_it = iter(nodes)
+    while True:
+        try:
+            node = next(
+                n for n in node_it if isinstance(n, (ast.Import, ast.ImportFrom))
+            )
+        except StopIteration:
+            return
+        sorter = sorter_factory()
+        idx = node.lineno - 1
+        while True:
+            set_comment(node, src[idx : node.end_lineno])
+            sorter.append(node)
+            idx = node.end_lineno
+            try:
+                node = next(node_it)
+            except StopIteration:
+                yield sorter
+                return
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                break
+        yield sorter
 
 
 def parse_args(argv):
@@ -301,13 +432,24 @@ def parse_args(argv):
 
 
 def pyimpsort(args):
-    tree = ast.parse(args.infile.read())
-    i = ImpSorter(group=args.group, site=args.site, user_locals=args.local)
-    i.visit(tree)
-    i.write_sorted(args.outfile)
+    """
+    Main logic for reading input, sorting imports, and writing output.
+
+    Only processes the first contiguous block of import statements.
+    """
+    data = args.infile.read()
+    for block in iter_blocks(
+        ast.parse(data).body,
+        data.splitlines(),
+        lambda: ImpSorter(group=args.group, site=args.site, user_locals=args.local),
+    ):
+        block.write_sorted(args.outfile)
+        # For compatibility, only the first block is processed for now.
+        break
 
 
 def main():
+    """Entry point for CLI usage."""
     pyimpsort(parse_args(sys.argv[1:]))
 
 
