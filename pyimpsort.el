@@ -1,12 +1,15 @@
-;;; pyimpsort.el --- Sort python imports. -*- lexical-binding: t -*-
+;;; pyimpsort.el --- Sort Python imports  -*- lexical-binding: t; -*-
 
-;; Copyright © 2014 Mario Rodas <marsam@users.noreply.github.com>
+;; Copyright (C) 2014 Mario Rodas
+;; Copyright (C) 2025 The pyimpsort contributors
 
 ;; Author: Mario Rodas <marsam@users.noreply.github.com>
-;; URL: https://github.com/emacs-pe/pyimpsort.el
-;; Keywords: convenience
-;; Version: 0.0.1
-;; Package-Requires: ((emacs "24.3"))
+;; Maintainer: Alain Delplanque <alaindelplanque@mailoo.org>
+;; URL: https://github.com/emacsorphanage/pyimpsort
+;; Package-Version: 0.0.1
+;; Package-Requires: ((emacs "24.3") (python))
+;; Keywords: tools, python, convenience
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.
 
