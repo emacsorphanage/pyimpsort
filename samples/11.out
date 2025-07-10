@@ -1,0 +1,6 @@
+from troposphere import (
+    AWS_ACCOUNT_ID, AWS_REGION, GetAtt, Join, Output, Parameter, Ref, Template
+)
+from troposphere.apigateway import (
+    Account, Deployment, MethodSetting, RestApi, Stage
+)

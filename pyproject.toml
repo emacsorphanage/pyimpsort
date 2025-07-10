@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyimpsort"
+version = "0.0.1"
+description = "Sort Python import statements."
+readme = "README.md"
+requires-python = ">=3.7"
+license = {file = "LICENSE-MIT"}
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+    "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/emacsorphanage/pyimpsort"
+Repository = "https://github.com/emacsorphanage/pyimpsort"
+Issues = "https://github.com/emacsorphanage/pyimpsort/issues"
+
+[project.scripts]
+pyimpsort = "pyimpsort:main"

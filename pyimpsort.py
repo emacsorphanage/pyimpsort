@@ -1,44 +1,38 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-impsort.py
-==========
-Sort python imports. Based on vim-sort-python-imports_
+pyimpsort.py --- Python import sorter
 
-Links
------
-+ https://www.python.org/dev/peps/pep-0008/#imports
-+ https://github.com/reddit/reddit/wiki/PythonImportGuidelines
-+ https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Imports
+This module sorts Python import statements.
 
-.. _vim-sort-python-imports: https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py
+It is inspired by the Vim plugin 'vim-sort-python-imports'
+(https://github.com/public/vim-sort-python-imports/blob/master/plugin/sort_imports.py)
+
+References:
+- PEP 8 — Style Guide for Python Code: https://www.python.org/dev/peps/pep-0008/#imports
+- Reddit Python Import Guidelines: https://github.com/reddit/reddit/wiki/PythonImportGuidelines
+- Google Python Style Guide: https://google.github.io/styleguide/pyguide.html#Imports
 """
-from __future__ import print_function
+
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2014-2025 The pyimpsort contributors
+# See LICENSE-MIT for license details
 
 import argparse
 import ast
+import importlib.util
+import pathlib
+import shutil
 import sys
-if sys.version_info < (3, 4):
-    import imp
-    import pkgutil
-else:
-    import importlib.util
-from collections import defaultdict
 import sysconfig
+import textwrap
+from collections import defaultdict
 from glob import glob1
 from os import path, scandir
+
 
 def _clean_ext_suffix(libname):
     # See: https://www.python.org/dev/peps/pep-3149/
     ext_suffix = sysconfig.get_config_var('EXT_SUFFIX') or '.so'
     return libname.replace(ext_suffix, '')
-
-
-def _get_python_lib(standard_lib=True):
-    if standard_lib:
-        return sysconfig.get_path("stdlib")
-    else:
-        return sysconfig.get_path("purelib")
 
 
 class ImpSorter(ast.NodeVisitor):
@@ -54,7 +48,27 @@ class ImpSorter(ast.NodeVisitor):
     We also make sure only 1 name is imported per import statement.
     """
 
-    def __init__(self):
+    # Groups of import statements
+    FUTURE = 0
+    STDLIB = 1
+    SITE = 2
+    THIRD_PARTY = 3
+    LOCAL = 4
+    RELATIVE = 5
+
+    def __init__(self, group=False, site=False, user_locals=None):
+        """
+        Initialize the import sorter configuration.
+
+        Args:
+            group (bool): If True, group multiple imports from the same module.
+            site (bool): If True, separate platform site-packages into their own group.
+            user_locals (list[str] or None): List of module names to consider
+                as local imports.
+        """
+        self.group = group
+        self.site = site
+        self.user_locals = user_locals or []
         self.original_nodes = []
         self.imports = set()
         self.from_imports = defaultdict(set)
@@ -81,18 +95,12 @@ class ImpSorter(ast.NodeVisitor):
 
     @staticmethod
     def get_dynlibs():
-        dirname = path.join(sys.exec_prefix, 'lib', 'python{0}'.format(sysconfig.get_python_version()), 'lib-dynload')
+        dirname = path.join(sysconfig.get_path("stdlib"), "lib-dynload")
         dynlibs = glob1(dirname, '*.so')
-        return map(_clean_ext_suffix, dynlibs)
+        return [_clean_ext_suffix(x) for x in dynlibs]
 
     @staticmethod
-    def _iter_stdmodules_deprecated():
-        stdlib_path = _get_python_lib(standard_lib=True)
-        importer = pkgutil.ImpImporter(stdlib_path)
-        return (m for m, _ in importer.iter_modules())
-
-    @staticmethod
-    def _iter_stdmodules_new():
+    def iter_stdmodules():
         # note this misses some edge cases that the original ImpImporter covered, i.e., namespace packages
         # but works for the majority of common packages
         stdlib_path = sysconfig.get_path('stdlib')
@@ -111,124 +119,196 @@ class ImpSorter(ast.NodeVisitor):
             if importlib.util.find_spec(module_name) is not None:
                 yield module_name
 
-    @staticmethod
-    def iter_stdmodules():
-        if sys.version_info < (3, 4):
-            return ImpSorter._iter_stdmodules_deprecated()
-        else:
-            return ImpSorter._iter_stdmodules_new()
-
-    def _is_thirdparty_deprecated(self, modname):
-        try:
-            imp.find_module(modname, self.python_paths)
-            thirdparty = True
-        except ImportError:
-            thirdparty = False
-        return thirdparty
-
-    def _is_thirdparty_new(self, modname):
-        for path in self.python_paths:
-            spec = importlib.util.find_spec(modname, path)
-            if spec is not None:
-                return True
-        return False
-
-    def is_thirdparty(self, modname):
-        # for older python
-        if sys.version_info < (3, 4):
-            return self._is_thirdparty_deprecated(modname)
-        # newer python (imp package doesn't exist in python 3.12+)
-        else:
-            return self._is_thirdparty_new(modname)
-
     # :: Node -> Key
     def _node_sort_key(self, node):
         """
         Given an AST node return a tuple which is used for sorting.
         """
-        non_future = non_stdlib = non_thirdparty = True
-        relative = False
+        level = getattr(node, "level", 0)
         if isinstance(node, ast.Import):
-            name = [node.names[0].name, node.names[0].asname]
-            level = 0
-            from_names = None
+            name = tuple(
+                x for x in (node.names[0].name, node.names[0].asname) if x is not None
+            )
             fromimport = 0
         elif isinstance(node, ast.ImportFrom):
-            name = [node.module]
-            level = node.level
-            from_names = [nm.name for nm in node.names]
+            name = (node.module or "", )
             fromimport = 1
         else:
             raise TypeError(node)
-        modname = name[0].split('.')[0] if name[0] else ''
+        modname = name[0].split('.')[0]
         if level != 0:
-            relative = True
+            group = self.RELATIVE
+        elif modname in self.user_locals:
+            group = self.LOCAL
         elif modname == '__future__':
-            non_future = False
+            group = self.FUTURE
         elif modname in self.stdlibs:
-            non_stdlib = False
-        elif self.is_thirdparty(modname):
-            non_thirdparty = False
-        return (non_future, non_stdlib, non_thirdparty, relative, level, fromimport, name, from_names)
+            group = self.STDLIB
+        else:
+            try:
+                spec = next(
+                    x
+                    for x in (
+                        importlib.util.find_spec(modname, p) for p in self.python_paths
+                    )
+                    if x
+                )
+                origin = pathlib.Path(spec.origin or "/")
+                if self.site and any(
+                    origin.is_relative_to(pathlib.Path(sysconfig.get_path(x)))
+                    for x in ("purelib", "platlib")
+                ):
+                    group = self.SITE
+                else:
+                    group = self.THIRD_PARTY
+            except StopIteration:
+                group = self.LOCAL
+        return (group, level, fromimport, name)
 
     def new_nodes(self):
         """
         Generate a list of tuples with the form `(Key, Node)`.
         """
-        nodes = []
-        for (level, module), names in self.from_imports.items():
-            for nm, asnm in sorted(names):
-                node = ast.ImportFrom(
-                    module=module,
-                    names=[ast.alias(name=nm, asname=asnm)],
-                    level=level
-                )
-                nodes.append((self._node_sort_key(node), node))
-        for nm, asnm in self.imports:
-            node = ast.Import(names=[ast.alias(name=nm, asname=asnm)])
-            nodes.append((self._node_sort_key(node), node))
-        return nodes
+        nodes = [
+            ast.Import(names=[ast.alias(name=nm, asname=asnm)])
+            for nm, asnm in self.imports
+        ]
+        # from ... import are groups into single statement
+        nodes.extend(
+            ast.ImportFrom(
+                module=module,
+                names=[ast.alias(name=nm, asname=asnm) for nm, asnm in sorted(names)],
+                level=level,
+            )
+            for (level, module), names in self.from_imports.items()
+        )
+        return [(self._node_sort_key(node), node) for node in nodes]
+
+    def format_import(self, node):
+        alias = node.names[0]
+        s = f"import {alias.name}"
+        if alias.asname:
+            s += f" as {alias.asname}"
+        return s
+
+    def format_import_from(self, node):
+        """
+        Format statement associated to a ast.ImportFrom 'node'.
+        """
+        fullnames = [
+            " as ".join(nm for nm in (name.name, name.asname) if nm)
+            for name in node.names
+        ]
+        res = f"from {'.' * node.level}{node.module or ''} import "
+        if len(res) + sum(len(x) for x in fullnames) + (len(fullnames) - 1) * 2 <= 80:
+            return res + ", ".join(fullnames)
+        # Need to split into multiples lines
+        lines = [res + "("]
+        toks = [x + "," for x in fullnames[:-1]]
+        toks.append(fullnames[-1])
+        line = "   "
+        for tok in toks:
+            if len(line) + len(tok) + 1 <= 80:
+                line += f" {tok}"
+            else:
+                lines.append(line)
+                line = f"    {tok}"
+        lines.append(line)
+        lines.append(")")
+        return "\n".join(lines)
 
     def write_sorted(self, file=sys.stdout):
         """
         Write sorted imports to file.
 
         file: a file-like object (stream).
+        group: if True, group import from same module
+        site: if True, separate group for plateform site-packages
         """
         pkey = None
         for key, node in sorted(self.new_nodes()):
             # insert new lines between groups
-            if pkey and key[:4] != pkey[:4]:
-                print(u'', file=file)
+            if pkey and key[0] != pkey[0]:
+                file.write("\n")
             pkey = key
-
-            # names here will actually always only have 1 element in it
-            # because we are only allowed 1 per line, but it's easy
-            # enough to cope with multiple anyway.
-            all_names = ', '.join(
-                (' as '.join(nm for nm in (name.name, name.asname) if nm))
-                for name in node.names
-            )
-
             if isinstance(node, ast.Import):
-                print(u'import {0}'.format(all_names), file=file)
-            elif isinstance(node, ast.ImportFrom):
-                print(u'from {0}{1} import {2}'.format('.' * node.level, node.module or '', all_names), file=file)
+                file.write(self.format_import(node))
+                file.write("\n")
+            else:
+                if self.group:
+                    file.write(self.format_import_from(node))
+                    file.write("\n")
+                else:
+                    for alias in node.names:
+                        file.write(
+                            self.format_import_from(
+                                ast.ImportFrom(
+                                    module=node.module, level=node.level, names=[alias]
+                                )
+                            )
+                        )
+                        file.write("\n")
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Sort import statements in a Python file.\n\n"
+            + textwrap.fill(
+                "Only the top contiguous block of imports is considered and "
+                "written to the output; the rest of the code is ignored.",
+                width=shutil.get_terminal_size(fallback=(80, 20)).columns,
+            )
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "infile",
+        nargs="?",
+        type=argparse.FileType("r"),
+        default=sys.stdin,
+        help="Input Python file to sort imports from (defaults to stdin if not provided)",
+    )
+    parser.add_argument(
+        "outfile",
+        nargs="?",
+        type=argparse.FileType("w"),
+        default=sys.stdout,
+        help="Output file to write the sorted result to (defaults to stdout if not provided)",
+    )
+    parser.add_argument(
+        "--group",
+        action="store_true",
+        default=False,
+        help="Group multiple imports from the same module into a single "
+        "'from ... import ...' statement",
+    )
+    parser.add_argument(
+        "--site",
+        action="store_true",
+        default=False,
+        help="Create a separate group for modules installed in the platform's "
+        "site-packages directory.",
+    )
+    parser.add_argument(
+        "--local",
+        action="append",
+        default=[],
+        metavar="MODULE",
+        help="Mark MODULE as a local import. Can be specified multiple times.",
+    )
+    return parser.parse_args(argv)
+
+
+def pyimpsort(args):
+    tree = ast.parse(args.infile.read())
+    i = ImpSorter(group=args.group, site=args.site, user_locals=args.local)
+    i.visit(tree)
+    i.write_sorted(args.outfile)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Python sort imports.")
-    parser.add_argument('infile', nargs='?', type=argparse.FileType('r'),
-                        default=sys.stdin)
-    parser.add_argument('outfile', nargs='?', type=argparse.FileType('w'),
-                        default=sys.stdout)
-
-    args = parser.parse_args()
-    with args.infile as infile, args.outfile as outfile:
-        tree = ast.parse(infile.read())
-        i = ImpSorter()
-        i.visit(tree)
-        i.write_sorted(outfile)
+    pyimpsort(parse_args(sys.argv[1:]))
 
 
 if __name__ == '__main__':
