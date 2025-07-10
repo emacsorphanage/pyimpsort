@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pyimpsort"
 version = "0.1.0"
 description = "Sort Python import statements."
-readme = "README.md"
+readme = "README.python.md"
 requires-python = ">=3.6"
 license = {file = "LICENSE-MIT"}
 
