@@ -6,7 +6,7 @@
 [![License GPLv3](https://img.shields.io/badge/license-GPL_v3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.html)
 [![MELPA](http://melpa.org/packages/pyimpsort-badge.svg)](http://melpa.org/#/pyimpsort)
 ![PyPI - Version](https://img.shields.io/pypi/v/pyimpsort)
-[![Build Status](https://github.com/emacsorphanage/pyimpsort/actions/workflows/tests.yml/badge.svg)]
+![Build Status](https://github.com/emacsorphanage/pyimpsort/actions/workflows/tests.yml/badge.svg)
 
 `pyimpsort.el` sort the python imports of a file.
 Currently uses [pyimpsort.py](pyimpsort.py) to process the way to sort python
@@ -107,6 +107,10 @@ You can also configure this per project using `.dir-locals.el`:
 
 ### ChangeLog
 
+
+Version 0.1.1 (2025-07-10)
+
+- Minor fixes
 
 Version 0.1.0 (2025-07-10)
 

@@ -6,7 +6,7 @@
 ;; Author: Mario Rodas <marsam@users.noreply.github.com>
 ;; Maintainer: Alain Delplanque <alaindelplanque@mailoo.org>
 ;; URL: https://github.com/emacsorphanage/pyimpsort
-;; Package-Version: 0.1.0
+;; Package-Version: 0.1.1
 ;; Package-Requires: ((emacs "24.3") (python))
 ;; Keywords: tools, python, convenience
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -127,6 +127,10 @@
 ;; [isort]: https://github.com/timothycrosley/isort
 ;;
 ;;; ChangeLog:
+;;
+;; Version 0.1.1 (2025-07-10)
+;;
+;; - Minor fixes
 ;;
 ;; Version 0.1.0 (2025-07-10)
 ;;
