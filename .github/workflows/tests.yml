@@ -1,0 +1,82 @@
+name: Tests
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  test-py36:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.6
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install tox
+      - run: tox -e py36
+
+  test-py37:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.7
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install tox
+      - run: tox -e py37
+
+  test-py11:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.11
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install tox
+      - run: tox -e py311
+
+  test-py313:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.13
+    steps:
+      - uses: actions/checkout@v3
+      - run: pip install tox
+      - run: tox -e py313
+
+  test-emacs24:
+    runs-on: ubuntu-latest
+    container:
+      image: silex/emacs:24.3
+    steps:
+      - uses: actions/checkout@v3
+      - run: apt-get update
+      - run: apt-get install -y python3
+      - run: emacs -Q --batch -L . -l test_pyimpsort.el --eval "(ert-run-tests-batch-and-exit)"
+
+  test-emacs26:
+    runs-on: ubuntu-latest
+    container:
+      image: silex/emacs:26
+    steps:
+      - uses: actions/checkout@v3
+      - run: apt-get update
+      - run: apt-get install -y python3
+      - run: emacs -Q --batch -L . -l test_pyimpsort.el --eval "(ert-run-tests-batch-and-exit)"
+
+  test-emacs28:
+    runs-on: ubuntu-latest
+    container:
+      image: silex/emacs:28
+    steps:
+      - uses: actions/checkout@v3
+      - run: apt-get update
+      - run: apt-get install -y python3
+      - run: emacs -Q --batch -L . -l test_pyimpsort.el --eval "(ert-run-tests-batch-and-exit)"
+
+  test-emacs30:
+    runs-on: ubuntu-latest
+    container:
+      image: silex/emacs:30
+    steps:
+      - uses: actions/checkout@v3
+      - run: apt-get update
+      - run: apt-get install -y python3
+      - run: emacs -Q --batch -L . -l test_pyimpsort.el --eval "(ert-run-tests-batch-and-exit)"
