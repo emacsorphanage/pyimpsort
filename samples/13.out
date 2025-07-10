@@ -1,0 +1,7 @@
+# Comment
+# Comment with spaces
+import os
+# Next import time module
+import time  # why ?
+from datetime import datetime  # toto
+from datetime import timedelta

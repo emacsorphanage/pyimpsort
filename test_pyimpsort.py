@@ -39,6 +39,7 @@ class Args:
         TestCase("samples/11.in", "samples/11.out", group=True),
         TestCase("samples/12.in", "samples/12.out"),
         TestCase("samples/12.in", "samples/12-grouped.out", group=True),
+        TestCase("samples/13.in", "samples/13.out"),
     ],
 )
 def test_sort_import(test_case):

@@ -343,6 +343,29 @@ def set_comment(node, lines):
             node.comments.append(comment)
 
 
+def end_of_statement(src, lineidx):
+    """
+    Replacement for ast.AST.end_lineno, which is missing in Python 3.7.
+
+    FIXME: remove when dropping support for Python 3.7.
+    """
+    idx = lineidx
+    parent = False
+    while True:
+        line = src[idx]
+        idx += 1
+        while line.endswith("\\"):
+            line = line[:-1] + src[idx]
+            idx += 1
+        comment_idx = line.find("#")
+        if comment_idx >= 0:
+            line = line[:comment_idx]
+        if "(" in line:
+            parent = True
+        if not parent or parent and ")" in line:
+            return idx
+
+
 def iter_blocks(nodes, src, sorter_factory):
     """
     Iterate over top-level blocks of import statements.
@@ -368,9 +391,13 @@ def iter_blocks(nodes, src, sorter_factory):
         sorter = sorter_factory()
         idx = node.lineno - 1
         while True:
-            set_comment(node, src[idx : node.end_lineno])
+            if sys.version_info >= (3, 8):
+                end_lineno = node.end_lineno
+            else:
+                end_lineno = end_of_statement(src, node.lineno - 1)
+            set_comment(node, src[idx : end_lineno])
             sorter.append(node)
-            idx = node.end_lineno
+            idx = end_lineno
             try:
                 node = next(node_it)
             except StopIteration:
