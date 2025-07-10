@@ -1,26 +1,47 @@
 import io
+import sys
 import typing
-from dataclasses import dataclass, field
-
-import pytest
 
 from pyimpsort import pyimpsort
 
-
-@dataclass
-class TestCase:
-    infname: str
-    outfname: str
-    group: bool = False
+import pytest
 
 
-@dataclass
-class Args:
-    infile: typing.TextIO
-    outfile: typing.TextIO
-    group: bool = False
-    site: bool = False
-    local: list = field(default_factory=list)
+if sys.version_info >= (3, 7):
+
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class TestCase:
+        infname: str
+        outfname: str
+        group: bool = False
+
+    @dataclass
+    class Args:
+        infile: typing.TextIO
+        outfile: typing.TextIO
+        group: bool = False
+        site: bool = False
+        local: list = field(default_factory=list)
+
+else:
+
+    class TestCase:
+
+        def __init__(self, infname, outfname, group=False):
+            self.infname = infname
+            self.outfname = outfname
+            self.group = group
+
+    class Args:
+
+        def __init__(self, infile, outfile, group=False, site=False, local=()):
+            self.infile = infile
+            self.outfile = outfile
+            self.group = group
+            self.site = site
+            self.local = local
 
 
 @pytest.mark.parametrize(
