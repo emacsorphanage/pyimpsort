@@ -57,8 +57,12 @@
 ;;; Configuration:
 ;;
 ;; By default, `pyimpsort.el' looks for the `pyimpsort.py` script in the same
-;; directory as this file, and constructs a shell command to run it using the
-;; Python interpreter configured in Emacs (`python-shell-interpreter').
+;; directory as this file and constructs a shell command using the `python3`
+;; executable found in the system or in the configured virtual environment
+;; (see `python-shell-virtualenv-root').
+;;
+;; Alternatively, you can install `pyimpsort` via PyPI and configure the command
+;; as explained above.
 ;;
 ;; These variables can be customized:
 ;;
