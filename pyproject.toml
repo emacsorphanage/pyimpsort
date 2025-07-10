@@ -38,5 +38,8 @@ Homepage = "https://github.com/emacsorphanage/pyimpsort"
 Repository = "https://github.com/emacsorphanage/pyimpsort"
 Issues = "https://github.com/emacsorphanage/pyimpsort/issues"
 
+[tool.setuptools]
+py-modules = ["pyimpsort"]
+
 [project.scripts]
 pyimpsort = "pyimpsort:main"
